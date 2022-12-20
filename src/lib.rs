@@ -1,3 +1,5 @@
+use std::process::Command;
+
 use tracing::{error, info, warn};
 use winit::{
     event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
@@ -35,6 +37,20 @@ const VERTICES: &[Vertex] = &[
     Vertex { position: [0.5, -0.5, 0.0], color: [0.0, 0.0, 1.0] },
 ];
 
+const COMPLEX_VERTICES: &[Vertex] = &[
+    Vertex { position: [-0.0868241, 0.49240386, 0.0], color: [0.5, 0.0, 0.5] }, 
+    Vertex { position: [-0.49513406, 0.06958647, 0.0], color: [0.5, 0.0, 0.5] }, 
+    Vertex { position: [0.44147372, 0.2347359, 0.0], color: [1.0, 0.0, 0.0] }, 
+
+    Vertex { position: [-0.49513406, 0.06958647, 0.0], color: [0.5, 0.0, 0.5] }, 
+    Vertex { position: [-0.21918549, -0.44939706, 0.0], color: [0.0, 1.0, 0.0] },
+    Vertex { position: [0.44147372, 0.2347359, 0.0], color: [1.0, 0.0, 0.0] }, 
+
+    Vertex { position: [-0.21918549, -0.44939706, 0.0], color: [0.0, 1.0, 0.0] }, 
+    Vertex { position: [0.35966998, -0.3473291, 0.0], color: [0.5, 0.0, 0.5] }, 
+    Vertex { position: [0.44147372, 0.2347359, 0.0], color: [1.0, 0.0, 0.0] }, 
+];
+
 
 struct State {
     surface: wgpu::Surface,
@@ -46,6 +62,9 @@ struct State {
     render_pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
     num_vertices: u32,
+    complex_vertex_buffer: wgpu::Buffer,
+    num_complex_vertices: u32,
+    use_complex: bool,
 }
 
 impl State {
@@ -160,6 +179,18 @@ impl State {
 
         let num_vertices = VERTICES.len() as u32;
 
+        let use_complex = false;
+
+        let complex_vertex_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Complex Vertex Buffer"),
+                contents: bytemuck::cast_slice(COMPLEX_VERTICES),
+                usage: wgpu::BufferUsages::VERTEX,
+            }
+        );
+
+        let num_complex_vertices = COMPLEX_VERTICES.len() as u32;
+
         Self {
             surface,
             device,
@@ -170,6 +201,9 @@ impl State {
             render_pipeline,
             vertex_buffer,
             num_vertices,
+            complex_vertex_buffer,
+            num_complex_vertices,
+            use_complex,
         }
     }
 
@@ -196,13 +230,25 @@ impl State {
                     g: g,
                     b: 0.3,
                     a: 1.0,
-                }
-            }
+                };
+                true
+            },
 
-            _ => {}
+            WindowEvent::KeyboardInput { 
+                input: 
+                    KeyboardInput{
+                        state,
+                        virtual_keycode: Some(VirtualKeyCode::Space),
+                        ..
+                    },
+                ..            
+            } => {
+                self.use_complex = *state == ElementState::Pressed;
+                true
+            },
+
+            _ => false
         }
-
-        false
     }
 
     fn update(&mut self) {
@@ -235,8 +281,21 @@ impl State {
             });
 
             render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.draw(0..self.num_vertices, 0..1);
+
+            let data = if self.use_complex {
+                (
+                    &self.complex_vertex_buffer,
+                    self.num_complex_vertices,
+                )
+            } else {
+                (
+                    &self.vertex_buffer,
+                    self.num_vertices,
+                )
+            };
+
+            render_pass.set_vertex_buffer(0, data.0.slice(..));
+            render_pass.draw(0..data.1, 0..1);
         }
 
         // submit will accept anything that implements IntoIter
