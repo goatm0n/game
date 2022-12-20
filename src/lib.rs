@@ -1,5 +1,3 @@
-use std::process::Command;
-
 use tracing::{error, info, warn};
 use winit::{
     event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
@@ -65,11 +63,9 @@ struct State {
     clear_color: wgpu::Color,
     render_pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
-    num_vertices: u32,
     index_buffer: wgpu::Buffer,
     num_indices: u32,
     complex_vertex_buffer: wgpu::Buffer,
-    num_complex_vertices: u32,
     complex_index_buffer: wgpu::Buffer,
     num_complex_indices: u32,
     use_complex: bool,
@@ -195,8 +191,6 @@ impl State {
 
         surface.configure(&device, &config);
 
-        let num_vertices = VERTICES.len() as u32;
-
         let use_complex = false;
 
         let complex_vertex_buffer = device.create_buffer_init(
@@ -206,8 +200,6 @@ impl State {
                 usage: wgpu::BufferUsages::VERTEX,
             }
         );
-
-        let num_complex_vertices = COMPLEX_VERTICES.len() as u32;
 
         let complex_index_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
@@ -228,11 +220,9 @@ impl State {
             clear_color,
             render_pipeline,
             vertex_buffer,
-            num_vertices,
             index_buffer,
             num_indices,
             complex_vertex_buffer,
-            num_complex_vertices,
             complex_index_buffer,
             num_complex_indices,
             use_complex,
@@ -251,9 +241,8 @@ impl State {
     fn input(&mut self, event: &WindowEvent) -> bool {
         match event {
             WindowEvent::CursorMoved {
-                device_id,
                 position,
-                modifiers,
+                ..
             } => {
                 let r = position.x / self.size.width as f64;
                 let g = position.y / self.size.height as f64;
