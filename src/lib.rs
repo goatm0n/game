@@ -37,18 +37,22 @@ const VERTICES: &[Vertex] = &[
     Vertex { position: [0.5, -0.5, 0.0], color: [0.0, 0.0, 1.0] },
 ];
 
+const INDICES: &[u16] = &[
+    0, 1, 2,
+];
+
 const COMPLEX_VERTICES: &[Vertex] = &[
     Vertex { position: [-0.0868241, 0.49240386, 0.0], color: [0.5, 0.0, 0.5] }, 
     Vertex { position: [-0.49513406, 0.06958647, 0.0], color: [0.5, 0.0, 0.5] }, 
-    Vertex { position: [0.44147372, 0.2347359, 0.0], color: [1.0, 0.0, 0.0] }, 
-
-    Vertex { position: [-0.49513406, 0.06958647, 0.0], color: [0.5, 0.0, 0.5] }, 
     Vertex { position: [-0.21918549, -0.44939706, 0.0], color: [0.0, 1.0, 0.0] },
-    Vertex { position: [0.44147372, 0.2347359, 0.0], color: [1.0, 0.0, 0.0] }, 
-
-    Vertex { position: [-0.21918549, -0.44939706, 0.0], color: [0.0, 1.0, 0.0] }, 
     Vertex { position: [0.35966998, -0.3473291, 0.0], color: [0.5, 0.0, 0.5] }, 
     Vertex { position: [0.44147372, 0.2347359, 0.0], color: [1.0, 0.0, 0.0] }, 
+];
+
+const COMPLEX_INDICES: &[u16] = &[
+    0, 1, 4,
+    1, 2, 4,
+    2, 3, 4,
 ];
 
 
@@ -62,8 +66,12 @@ struct State {
     render_pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
     num_vertices: u32,
+    index_buffer: wgpu::Buffer,
+    num_indices: u32,
     complex_vertex_buffer: wgpu::Buffer,
     num_complex_vertices: u32,
+    complex_index_buffer: wgpu::Buffer,
+    num_complex_indices: u32,
     use_complex: bool,
 }
 
@@ -116,6 +124,16 @@ impl State {
                 usage: wgpu::BufferUsages::VERTEX,
             }
         );
+
+        let index_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Index Buffer"),
+                contents: bytemuck::cast_slice(INDICES),
+                usage: wgpu::BufferUsages::INDEX,
+            }
+        );
+
+        let num_indices = INDICES.len() as u32;
 
         let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));  
 
@@ -191,6 +209,16 @@ impl State {
 
         let num_complex_vertices = COMPLEX_VERTICES.len() as u32;
 
+        let complex_index_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Complex Index Buffer"),
+                contents: bytemuck::cast_slice(COMPLEX_INDICES),
+                usage: wgpu::BufferUsages::INDEX,
+            }
+        );
+
+        let num_complex_indices = COMPLEX_INDICES.len() as u32;
+
         Self {
             surface,
             device,
@@ -201,8 +229,12 @@ impl State {
             render_pipeline,
             vertex_buffer,
             num_vertices,
+            index_buffer,
+            num_indices,
             complex_vertex_buffer,
             num_complex_vertices,
+            complex_index_buffer,
+            num_complex_indices,
             use_complex,
         }
     }
@@ -285,17 +317,20 @@ impl State {
             let data = if self.use_complex {
                 (
                     &self.complex_vertex_buffer,
-                    self.num_complex_vertices,
+                    self.num_complex_indices,
+                    &self.complex_index_buffer,
                 )
             } else {
                 (
                     &self.vertex_buffer,
-                    self.num_vertices,
+                    self.num_indices,
+                    &self.index_buffer,
                 )
             };
 
             render_pass.set_vertex_buffer(0, data.0.slice(..));
-            render_pass.draw(0..data.1, 0..1);
+            render_pass.set_index_buffer(data.2.slice(..), wgpu::IndexFormat::Uint16);
+            render_pass.draw_indexed(0..data.1, 0, 0..1);
         }
 
         // submit will accept anything that implements IntoIter
