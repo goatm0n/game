@@ -288,6 +288,7 @@ struct State {
     camera_controller: CameraController,
     instances: Vec<Instance>,
     instance_buffer: wgpu::Buffer,
+    depth_texture: texture::Texture,
 }
 
 impl State {
@@ -544,6 +545,12 @@ impl State {
             }
         );
 
+        let depth_texture = texture::Texture::create_depth_texture(
+            &device, 
+            &config, 
+            "depth_texture"
+        );
+
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Render Pipeline"),
             layout: Some(&render_pipeline_layout),
@@ -576,7 +583,15 @@ impl State {
                 // Requires Features::CONSERVATIVE_RASTERIZATION
                 conservative: false,
             },
-            depth_stencil: None, // 1.
+            depth_stencil: Some(
+                wgpu::DepthStencilState { 
+                    format: texture::Texture::DEPTH_FORMAT, 
+                    depth_write_enabled: true, 
+                    depth_compare: wgpu::CompareFunction::Less, 
+                    stencil: wgpu::StencilState::default(), 
+                    bias: wgpu::DepthBiasState::default(), 
+                }
+            ),
             multisample: wgpu::MultisampleState {
                 count: 1, // 2.
                 mask: !0, // 3.
@@ -636,6 +651,7 @@ impl State {
             camera_controller,
             instances,
             instance_buffer,
+            depth_texture,
         }
     }
 
@@ -646,6 +662,11 @@ impl State {
             self.config.height = new_size.height;
             self.surface.configure(&self.device, &self.config);
         }
+        self.depth_texture = texture::Texture::create_depth_texture(
+            &self.device, 
+            &self.config, 
+            "depth_texture"
+        );
     }
 
     fn input(&mut self, event: &WindowEvent) -> bool {
@@ -714,7 +735,18 @@ impl State {
                         store: true,
                     },
                 })],
-                depth_stencil_attachment: None,
+                depth_stencil_attachment: Some(
+                    wgpu::RenderPassDepthStencilAttachment {
+                        view: &self.depth_texture.view,
+                        depth_ops: Some(
+                            wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(1.0),
+                                store: true,
+                            }
+                        ),
+                        stencil_ops: None,
+                    }
+                ),
             });
 
             render_pass.set_pipeline(&self.render_pipeline);
