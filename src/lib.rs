@@ -1,3 +1,4 @@
+//use model::Vertex;
 use tracing::{error, info, warn};
 use winit::{
     event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
@@ -8,7 +9,7 @@ use wgpu::{util::DeviceExt, VertexAttribute};
 use cgmath::prelude::*;
 
 mod texture;
-
+mod model;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -560,6 +561,7 @@ impl State {
                 buffers: &[
                     Vertex::desc(),
                     InstanceRaw::desc(),
+                    //model::ModelVertex::desc(),
                 ], 
             },
             fragment: Some(wgpu::FragmentState { 
