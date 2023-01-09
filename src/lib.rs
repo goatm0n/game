@@ -5,50 +5,48 @@ use winit::{
     event_loop::{ControlFlow, EventLoop},
     window::{Window, WindowBuilder},
 };
-use wgpu::{util::DeviceExt, VertexAttribute};
+use wgpu::util::DeviceExt;
 use cgmath::prelude::*;
 
 mod texture;
 mod model;
+mod resources;
+
+use model::{Vertex, DrawModel};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct Vertex {
+struct SimpleVertex {
     position: [f32; 3],
     tex_coords: [f32; 2],
 }
 
-impl Vertex {
-    const ATTRIBS: [VertexAttribute; 2] = wgpu::vertex_attr_array![
-        0 => Float32x3, 
-        1 => Float32x2
-    ];
-
+impl Vertex for SimpleVertex {
     fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
         wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+            array_stride: std::mem::size_of::<SimpleVertex>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &Self::ATTRIBS,
+            attributes: &Self::ATTRIBS, 
         }
     }
 }
 
-const VERTICES: &[Vertex] = &[
-    Vertex { position: [0.0, 0.5, 0.0], tex_coords: [0.5, 0.0] },
-    Vertex { position: [-0.5, -0.5, 0.0], tex_coords: [0.0, 1.0] },
-    Vertex { position: [0.5, -0.5, 0.0], tex_coords: [1.0, 1.0] },
+const VERTICES: &[SimpleVertex] = &[
+    SimpleVertex { position: [0.0, 0.5, 0.0], tex_coords: [0.5, 0.0] },
+    SimpleVertex { position: [-0.5, -0.5, 0.0], tex_coords: [0.0, 1.0] },
+    SimpleVertex { position: [0.5, -0.5, 0.0], tex_coords: [1.0, 1.0] },
 ];
 
 const INDICES: &[u16] = &[
     0, 1, 2,
 ];
 
-const COMPLEX_VERTICES: &[Vertex] = &[
-    Vertex { position: [-0.0868241, 0.49240386, 0.0], tex_coords: [0.4131759, 0.00759614] }, 
-    Vertex { position: [-0.49513406, 0.06958647, 0.0], tex_coords: [0.0048659444, 0.43041354] }, 
-    Vertex { position: [-0.21918549, -0.44939706, 0.0], tex_coords: [0.28081453, 0.949397] },
-    Vertex { position: [0.35966998, -0.3473291, 0.0], tex_coords: [0.85967, 0.84732914] }, 
-    Vertex { position: [0.44147372, 0.2347359, 0.0], tex_coords: [0.9414737, 0.2652641] }, 
+const COMPLEX_VERTICES: &[SimpleVertex] = &[
+    SimpleVertex { position: [-0.0868241, 0.49240386, 0.0], tex_coords: [0.4131759, 0.00759614] }, 
+    SimpleVertex { position: [-0.49513406, 0.06958647, 0.0], tex_coords: [0.0048659444, 0.43041354] }, 
+    SimpleVertex { position: [-0.21918549, -0.44939706, 0.0], tex_coords: [0.28081453, 0.949397] },
+    SimpleVertex { position: [0.35966998, -0.3473291, 0.0], tex_coords: [0.85967, 0.84732914] }, 
+    SimpleVertex { position: [0.44147372, 0.2347359, 0.0], tex_coords: [0.9414737, 0.2652641] }, 
 ];
 
 const COMPLEX_INDICES: &[u16] = &[
@@ -290,6 +288,8 @@ struct State {
     instances: Vec<Instance>,
     instance_buffer: wgpu::Buffer,
     depth_texture: texture::Texture,
+    draw_models: bool,
+    obj_model: model::Model,
 }
 
 impl State {
@@ -492,6 +492,7 @@ impl State {
         );
 
         //------------- INSTANCES --------------
+        const SPACE_BETWEEN_CUBES: f32 = 3.0;
         let instances = (0..NUM_INSTANCES_PER_ROW).flat_map(
             |z| {
                 (0..NUM_INSTANCES_PER_ROW).map(
@@ -559,9 +560,9 @@ impl State {
                 module: &shader,
                 entry_point: "vs_main", 
                 buffers: &[
-                    Vertex::desc(),
+                    SimpleVertex::desc(),
                     InstanceRaw::desc(),
-                    //model::ModelVertex::desc(),
+                    model::ModelVertex::desc(),
                 ], 
             },
             fragment: Some(wgpu::FragmentState { 
@@ -602,9 +603,6 @@ impl State {
             multiview: None, // 5.
         });
 
-
-        let use_complex = false;
-
         let complex_vertex_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: Some("Complex Vertex Buffer"),
@@ -627,6 +625,13 @@ impl State {
 
         let camera_controller = CameraController::new(0.2);
 
+        let obj_model = resources::load_model(
+            "cube.obj", 
+            &device, 
+            &queue, 
+            &texture_bind_group_layout
+        ).await;
+
         Self {
             surface,
             device,
@@ -641,7 +646,7 @@ impl State {
             complex_vertex_buffer,
             complex_index_buffer,
             num_complex_indices,
-            use_complex,
+            use_complex: false,
             diffuse_bind_group,
             diffuse_texture,
             communist_texture,
@@ -654,6 +659,8 @@ impl State {
             instances,
             instance_buffer,
             depth_texture,
+            draw_models: false,
+            obj_model,
         }
     }
 
@@ -698,6 +705,19 @@ impl State {
                 ..            
             } => {
                 self.use_complex = *state == ElementState::Pressed;
+                true
+            },
+
+            WindowEvent::KeyboardInput { 
+                input:
+                    KeyboardInput {
+                        state,
+                        virtual_keycode: Some(VirtualKeyCode::LShift),
+                        ..
+                    }, 
+                .. 
+            } => {
+                self.draw_models = *state == ElementState::Pressed;
                 true
             },
 
@@ -769,14 +789,24 @@ impl State {
                 )
             };
 
-
             render_pass.set_bind_group(0, data.3, &[]);
             render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
             render_pass.set_vertex_buffer(0, data.0.slice(..));
             render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
             render_pass.set_index_buffer(data.2.slice(..), wgpu::IndexFormat::Uint16);
 
-            render_pass.draw_indexed(0..data.1, 0, 0..self.instances.len() as _);
+            if self.draw_models {
+                render_pass.draw_mesh_instanced(
+                    &self.obj_model.meshes[0], 
+                    0..self.instances.len() as u32
+                );
+            } else {
+                render_pass.draw_indexed(
+                    0..data.1, 
+                    0, 
+                    0..self.instances.len() as _
+                );
+            }     
         }
 
         // submit will accept anything that implements IntoIter

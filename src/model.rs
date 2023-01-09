@@ -1,0 +1,89 @@
+use std::ops::Range;
+use wgpu::VertexAttribute;
+use crate::texture;
+
+pub trait Vertex {
+    const ATTRIBS: [VertexAttribute; 2] = wgpu::vertex_attr_array![
+        0 => Float32x3, 
+        1 => Float32x2
+    ];
+
+    fn desc<'a>() -> wgpu::VertexBufferLayout<'a>;
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct ModelVertex {
+    pub position: [f32; 3],
+    pub tex_coords: [f32; 2],
+    pub normal: [f32; 3],
+}
+
+impl Vertex for ModelVertex {
+    fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
+        use std::mem;
+        wgpu::VertexBufferLayout { 
+            array_stride: mem::size_of::<ModelVertex>() as wgpu::BufferAddress, 
+            step_mode: wgpu::VertexStepMode::Vertex, 
+            attributes: &[
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x3,
+                    offset: 0,
+                    shader_location: 0,
+                },
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x2,
+                    offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
+                    shader_location: 1, 
+                },
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x3,
+                    offset: mem::size_of::<[f32; 5]>() as wgpu::BufferAddress,
+                    shader_location: 2,
+                },
+            ],
+        }
+    }
+}
+
+pub struct Material {
+    pub name: String,
+    pub diffuse_texture: texture::Texture,
+    pub bind_group: wgpu::BindGroup,
+}
+
+pub struct Mesh {
+    pub name: String,
+    pub vertex_buffer: wgpu::Buffer,
+    pub index_buffer: wgpu::Buffer,
+    pub num_elements: u32,
+    pub material: usize,
+}
+
+pub struct Model {
+    pub meshes: Vec<Mesh>,
+    pub materials: Vec<Material>,
+}
+
+pub trait DrawModel<'a> {
+    fn draw_mesh(&mut self, mesh: &'a Mesh);
+    fn draw_mesh_instanced(&mut self, mesh: &'a Mesh, instances: Range<u32>);
+}
+
+impl<'a, 'b> DrawModel<'b> for wgpu::RenderPass<'a> 
+    where 'b: 'a 
+{
+    fn draw_mesh(&mut self, mesh: &'a Mesh) {
+        self.draw_mesh_instanced(mesh, 0..1);
+    }
+
+    fn draw_mesh_instanced(&mut self, mesh: &'a Mesh, instances: Range<u32>) {
+        self.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+        self.set_index_buffer(
+            mesh.index_buffer.slice(..), 
+            wgpu::IndexFormat::Uint32
+        );
+        self.draw_indexed(0..mesh.num_elements, 0, instances);
+
+    }
+}
