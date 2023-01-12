@@ -252,13 +252,6 @@ impl Instance {
     }
 }
 
-const NUM_INSTANCES_PER_ROW: u32 = 10;
-const INSTANCE_DISPLACEMENT: cgmath::Vector3<f32> = cgmath::Vector3::new(
-    NUM_INSTANCES_PER_ROW as f32 * 0.5,
-    0.0,
-    NUM_INSTANCES_PER_ROW as f32 * 0.5,
-);
-
 struct State {
     surface: wgpu::Surface,
     device: wgpu::Device,
@@ -492,16 +485,24 @@ impl State {
         );
 
         //------------- INSTANCES --------------
-        const SPACE_BETWEEN_CUBES: f32 = 3.0;
+        const NUM_INSTANCES_PER_ROW: u32 = 10;
+        const SPACE_BETWEEN: f32 = 3.0;
         let instances = (0..NUM_INSTANCES_PER_ROW).flat_map(
             |z| {
                 (0..NUM_INSTANCES_PER_ROW).map(
                     move |x| {
+                        let x = SPACE_BETWEEN * (
+                            x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0
+                        );
+                        let z = SPACE_BETWEEN * (
+                            z as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0
+                        );                        
+
                         let position = cgmath::Vector3 {
-                            x: x as f32,
+                            x: x,
                             y: 0.0,
-                            z: z as f32
-                        } - INSTANCE_DISPLACEMENT;
+                            z: z,
+                        };
 
                         let rotation = if position.is_zero() {
                             // this is needed so an object at (0, 0, 0) won't get scaled to zero
@@ -542,6 +543,7 @@ impl State {
                 bind_group_layouts: &[
                     &texture_bind_group_layout,
                     &camera_bind_group_layout,
+                    // i think we need to insert model_bind_group_layout here
                 ],
                 push_constant_ranges: &[],
             }
@@ -560,9 +562,8 @@ impl State {
                 module: &shader,
                 entry_point: "vs_main", 
                 buffers: &[
-                    SimpleVertex::desc(),
-                    InstanceRaw::desc(),
-                    model::ModelVertex::desc(),
+                   model::ModelVertex::desc(), 
+                   InstanceRaw::desc(),
                 ], 
             },
             fragment: Some(wgpu::FragmentState { 
@@ -789,24 +790,24 @@ impl State {
                 )
             };
 
-            render_pass.set_bind_group(0, data.3, &[]);
-            render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
-            render_pass.set_vertex_buffer(0, data.0.slice(..));
+            //render_pass.set_bind_group(0, data.3, &[]);
+            //render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
+            //render_pass.set_vertex_buffer(2, data.0.slice(..));
             render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
             render_pass.set_index_buffer(data.2.slice(..), wgpu::IndexFormat::Uint16);
 
-            if self.draw_models {
-                render_pass.draw_mesh_instanced(
-                    &self.obj_model.meshes[0], 
-                    0..self.instances.len() as u32
-                );
-            } else {
-                render_pass.draw_indexed(
-                    0..data.1, 
-                    0, 
-                    0..self.instances.len() as _
-                );
-            }     
+            /* render_pass.draw_indexed(
+                0..data.1, 
+                2, 
+                0..self.instances.len() as _
+            ); */
+
+            render_pass.draw_model_instanced(
+                &self.obj_model, 
+                0..self.instances.len() as u32, 
+                &self.camera_bind_group
+            );
+  
         }
 
         // submit will accept anything that implements IntoIter

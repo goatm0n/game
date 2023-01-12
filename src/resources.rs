@@ -7,7 +7,7 @@ pub async fn load_string(file_name: &str) -> String {
     let path = std::path::Path::new(env!("OUT_DIR"))
         .join("res")
         .join(file_name);
-    
+    dbg!(&path);
     std::fs::read_to_string(path).unwrap()
 }
 
@@ -54,6 +54,7 @@ pub async fn load_model(
     let mut materials: Vec<model::Material> = Vec::new();
 
     for m in obj_materials.unwrap() {
+        dbg!(&m.diffuse_texture);
         let diffuse_texture = load_texture(
             &m.diffuse_texture, 
             device, 
