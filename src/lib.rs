@@ -86,17 +86,21 @@ impl Camera {
 struct CameraUniform {
     // We can't use cgmath with bytemuck directly so we'll have
     // to convert the Matrix4 into a 4x4 f32 array
+    view_position: [f32; 4],
     view_proj: [[f32; 4]; 4],
 }
 
 impl CameraUniform {
     fn new() -> Self {
         Self {
+            view_position: [0.0; 4],
             view_proj: cgmath::Matrix4::identity().into(),
         }
     }
 
     fn update_view_proj(&mut self, camera: &Camera) {
+        // using Vector4 because of uniforms 16 byte spacing requirement
+        self.view_position = camera.eye.to_homogeneous().into();
         self.view_proj = camera.build_view_projection_matrix().into();
     }
 }
@@ -188,15 +192,11 @@ impl CameraController {
     }
 }
 
-struct Instance {
-    position: cgmath::Vector3<f32>,
-    rotation: cgmath::Quaternion<f32>,
-}
-
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 struct InstanceRaw {
     model: [[f32; 4]; 4],
+    normal: [[f32; 3]; 3],
 }
 
 impl InstanceRaw {
@@ -237,16 +237,38 @@ impl InstanceRaw {
                     offset: mem::size_of::<[f32; 12]>() as wgpu::BufferAddress,
                     shader_location: 8,
                 },
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x3,
+                    offset: mem::size_of::<[f32; 16]>() as wgpu::BufferAddress,
+                    shader_location: 9,
+                },
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x3,
+                    offset: mem::size_of::<[f32; 19]>() as wgpu::BufferAddress,
+                    shader_location: 10,
+                },
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x3,
+                    offset: mem::size_of::<[f32; 22]>() as wgpu::BufferAddress,
+                    shader_location: 11,
+                },
             ]
         }
     }
 }
 
+struct Instance {
+    position: cgmath::Vector3<f32>,
+    rotation: cgmath::Quaternion<f32>,
+}
+
 impl Instance {
     fn to_raw(&self) -> InstanceRaw {
+        let model = cgmath::Matrix4::from_translation(self.position) * 
+            cgmath::Matrix4::from(self.rotation);
         InstanceRaw {
-            model: (cgmath::Matrix4::from_translation(self.position) * 
-                cgmath::Matrix4::from(self.rotation)).into(),
+            model: model.into(),
+            normal: cgmath::Matrix3::from(self.rotation).into(),
         }
     }
 }
@@ -530,7 +552,8 @@ impl State {
                 entries: &[
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
-                        visibility: wgpu::ShaderStages::VERTEX,
+                        visibility: wgpu::ShaderStages::VERTEX | 
+                            wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Buffer { 
                             ty: wgpu::BufferBindingType::Uniform, 
                             has_dynamic_offset: false, 
@@ -576,7 +599,7 @@ impl State {
                             z: z,
                         };
 
-                        let rotation = if position.is_zero() {
+                        /* let rotation = if position.is_zero() {
                             // this is needed so an object at (0, 0, 0) won't get scaled to zero
                             // as Quaternions can effect scale if they're not created correctly
                             cgmath::Quaternion::from_axis_angle(
@@ -588,7 +611,12 @@ impl State {
                                 position.normalize(), 
                                 cgmath::Deg(45.0)
                             )
-                        };
+                        }; */
+
+                        let rotation = cgmath::Quaternion::from_axis_angle(
+                            (0.0, 1.0, 0.0).into(), 
+                            cgmath::Deg(180.0)
+                        );
 
                         Instance {
                             position,
