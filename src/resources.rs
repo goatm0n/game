@@ -54,9 +54,14 @@ pub async fn load_model(
     let mut materials: Vec<model::Material> = Vec::new();
 
     for m in obj_materials.unwrap() {
-        dbg!(&m.diffuse_texture);
         let diffuse_texture = load_texture(
             &m.diffuse_texture, 
+            device, 
+            queue
+        ).await;
+
+        let normal_texture = load_texture(
+            &m.normal_texture, 
             device, 
             queue
         ).await;
@@ -78,13 +83,13 @@ pub async fn load_model(
             }
         );
 
-        materials.push(
-            model::Material {
-                name: m.name,
-                diffuse_texture,
-                bind_group,
-            }
-        );
+        materials.push(model::Material::new(
+            device,
+            &m.name,
+            diffuse_texture,
+            normal_texture,
+            layout,
+        ))
     }
 
     let meshes = models.into_iter().map(|m| {
