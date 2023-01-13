@@ -1,6 +1,3 @@
-use std::alloc::Layout;
-
-//use model::Vertex;
 use tracing::{error, info, warn};
 use winit::{
     event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
@@ -299,10 +296,11 @@ struct State {
     light_uniform: LightUniform,
     light_buffer: wgpu::Buffer,
     light_bind_group: wgpu::BindGroup,
+    light_render_pipeline: wgpu::RenderPipeline,
 }
 
 fn create_render_pipeline(
-    device: wgpu::Device,
+    device: &wgpu::Device,
     shader: wgpu::ShaderModuleDescriptor,
     layout: &wgpu::PipelineLayout,
     vertex_layouts: &[wgpu::VertexBufferLayout],
@@ -316,6 +314,7 @@ fn create_render_pipeline(
             label: Some("render Pipeline"), 
             layout: Some(layout), 
             vertex: wgpu::VertexState {
+
                 module: &shader,
                 entry_point: "vs_main",
                 buffers: vertex_layouts,
@@ -676,7 +675,22 @@ impl State {
             "depth_texture"
         );
 
-        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        let render_pipeline = {
+            let shader = wgpu::ShaderModuleDescriptor {
+                label: Some("Normal Shader"),
+                source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
+            };
+            create_render_pipeline(
+                &device, 
+                shader, 
+                &render_pipeline_layout, 
+                &[model::ModelVertex::desc(), InstanceRaw::desc()], 
+                config.format, 
+                Some(texture::Texture::DEPTH_FORMAT),
+            )
+        };
+
+        /* let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Render Pipeline"),
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
@@ -723,7 +737,32 @@ impl State {
                 alpha_to_coverage_enabled: false, // 4.
             },
             multiview: None, // 5.
-        });
+        }); */
+
+        let light_render_pipeline = {
+            let layout = device.create_pipeline_layout(
+                &wgpu::PipelineLayoutDescriptor {
+                    label: Some("Light Pipeline Layout"),
+                    bind_group_layouts: &[
+                        &camera_bind_group_layout, 
+                        &light_bind_group_layout
+                    ],
+                    push_constant_ranges: &[],
+                }
+            );
+            let shader = wgpu::ShaderModuleDescriptor {
+                label: Some("Light Shader"),
+                source: wgpu::ShaderSource::Wgsl(include_str!("light.wgsl").into()),
+            };
+            create_render_pipeline(
+                &device, 
+                shader, 
+                &layout, 
+                &[model::ModelVertex::desc()], 
+                config.format, 
+                Some(texture::Texture::DEPTH_FORMAT)
+            )
+        };
 
         let complex_vertex_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
@@ -786,6 +825,7 @@ impl State {
             light_uniform,
             light_buffer,
             light_bind_group,
+            light_render_pipeline,
         }
     }
 
@@ -910,9 +950,9 @@ impl State {
                 ),
             });
 
-            render_pass.set_pipeline(&self.render_pipeline);
+            //render_pass.set_pipeline(&self.render_pipeline);
 
-            let data = if self.use_complex {
+            /* let data = if self.use_complex {
                 (
                     &self.complex_vertex_buffer,
                     self.num_complex_indices,
@@ -926,13 +966,13 @@ impl State {
                     &self.index_buffer,
                     &self.diffuse_bind_group,
                 )
-            };
+            }; */
 
             //render_pass.set_bind_group(0, data.3, &[]);
             //render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
             //render_pass.set_vertex_buffer(2, data.0.slice(..));
             render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
-            render_pass.set_index_buffer(data.2.slice(..), wgpu::IndexFormat::Uint16);
+            //render_pass.set_index_buffer(data.2.slice(..), wgpu::IndexFormat::Uint16);
 
             /* render_pass.draw_indexed(
                 0..data.1, 
@@ -940,10 +980,21 @@ impl State {
                 0..self.instances.len() as _
             ); */
 
+            use crate::model::DrawLight;
+            render_pass.set_pipeline(&self.light_render_pipeline);
+            render_pass.draw_light_model(
+                &self.obj_model, 
+                &self.camera_bind_group, 
+                &self.light_bind_group
+            );
+
+
+            render_pass.set_pipeline(&self.render_pipeline);
             render_pass.draw_model_instanced(
                 &self.obj_model, 
                 0..self.instances.len() as u32, 
-                &self.camera_bind_group
+                &self.camera_bind_group,
+                &self.light_bind_group,
             );
   
         }
