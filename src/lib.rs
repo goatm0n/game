@@ -251,7 +251,6 @@ struct State {
     size: winit::dpi::PhysicalSize<u32>,
     clear_color: wgpu::Color,
     render_pipeline: wgpu::RenderPipeline,
-    use_complex: bool,
     camera: Camera,
     camera_uniform: CameraUniform,
     camera_buffer: wgpu::Buffer,
@@ -260,7 +259,6 @@ struct State {
     instances: Vec<Instance>,
     instance_buffer: wgpu::Buffer,
     depth_texture: texture::Texture,
-    draw_models: bool,
     obj_model: model::Model,
     light_uniform: LightUniform,
     light_buffer: wgpu::Buffer,
@@ -666,7 +664,7 @@ impl State {
             size,
             clear_color,
             render_pipeline,
-            use_complex: false,
+            //use_complex: false,
             camera,
             camera_uniform,
             camera_buffer,
@@ -675,7 +673,7 @@ impl State {
             instances,
             instance_buffer,
             depth_texture,
-            draw_models: false,
+            //draw_models: false,
             obj_model,
             light_uniform,
             light_buffer,
@@ -713,33 +711,7 @@ impl State {
                     a: 1.0,
                 };
                 true
-            },
-
-            WindowEvent::KeyboardInput { 
-                input: 
-                    KeyboardInput{
-                        state,
-                        virtual_keycode: Some(VirtualKeyCode::Space),
-                        ..
-                    },
-                ..            
-            } => {
-                self.use_complex = *state == ElementState::Pressed;
-                true
-            },
-
-            WindowEvent::KeyboardInput { 
-                input:
-                    KeyboardInput {
-                        state,
-                        virtual_keycode: Some(VirtualKeyCode::LShift),
-                        ..
-                    }, 
-                .. 
-            } => {
-                self.draw_models = *state == ElementState::Pressed;
-                true
-            },
+            }
 
             _ => self.camera_controller.process_events(event)
         }
